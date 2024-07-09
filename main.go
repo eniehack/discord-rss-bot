@@ -63,7 +63,6 @@ func main() {
 		log.Println("Error reading last run time:", err)
 		last := time.Now().Add(-3 * time.Hour)
 		lastRun = &last
-		fmt.Println(last)
 	}
 
 	fp := gofeed.NewParser()
