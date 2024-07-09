@@ -81,7 +81,7 @@ func main() {
 		err := h.sendToDiscord(item.Title + ": " + item.Link)
 		if err != nil {
 			log.Fatalf("Error sending to Discord: %v", err)
-			return
+			continue
 		}
 		log.Println("posted:", item.Link)
 
