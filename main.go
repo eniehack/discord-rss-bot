@@ -9,6 +9,7 @@ import (
 	"log"
 	"net/http"
 	"os"
+	"strings"
 	"time"
 
 	"github.com/BurntSushi/toml"
@@ -114,7 +115,8 @@ func (h *Handler) readLastPostTime() (*time.Time, error) {
 	if err != nil {
 		return nil, err
 	}
-	t, err := time.Parse(time.RFC3339, buf.String())
+	crTrimedStr := strings.TrimRight(buf.String(), "\n")
+	t, err := time.Parse(time.RFC3339, crTrimedStr)
 	fmt.Println("t: ", t)
 	return &t, err
 }
@@ -126,7 +128,7 @@ func (h *Handler) saveLastPostTime(t time.Time) error {
 		return err
 	}
 	defer f.Close()
-	_, err = io.WriteString(f, t.Format(time.RFC3339))
+	_, err = io.WriteString(f, t.Format(time.RFC3339)+"\n")
 	return err
 }
 
