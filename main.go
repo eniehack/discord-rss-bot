@@ -77,7 +77,7 @@ func main() {
 		if lastRun != nil && !item.PublishedParsed.After(*lastRun) {
 			continue
 		}
-		fmt.Println(item.Title + ": " + item.Link)
+		time.Sleep(time.Second * 1)
 		err := h.sendToDiscord(item.Title + ": " + item.Link)
 		if err != nil {
 			log.Fatalf("Error sending to Discord: %v", err)
