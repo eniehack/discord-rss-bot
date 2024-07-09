@@ -82,6 +82,7 @@ func main() {
 			log.Fatalf("Error sending to Discord: %v", err)
 			return
 		}
+		log.Println("posted:", item.Link)
 	}
 
 	if err := h.saveLastRunTime(time.Now()); err != nil {
