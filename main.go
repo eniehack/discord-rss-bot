@@ -45,24 +45,15 @@ func main() {
 		log.Fatalf("cannot parse config file: %v", err)
 	}
 
-	var f *os.File
-	f, err := os.OpenFile(config.TimestampFile, os.O_RDWR, 0644)
-	if !os.IsExist(err) {
-		f, err = os.OpenFile(config.TimestampFile, os.O_RDWR|os.O_CREATE, 0644)
-	}
-	if err != nil {
-		log.Fatalf("cannot open timestamp file: %v", err)
-		return
-	}
-	defer f.Close()
-
-	h := NewHandler(f, config)
+	h := NewHandler(config)
 
 	lastRun, err := h.readLastPostTime()
-	if err != nil {
-		log.Println("Error reading last run time:", err)
-		last := time.Now().Add(-3 * time.Hour)
+	if err != nil && lastRun == nil {
+		log.Println("timestamp file not found")
+		last := time.Now().Add(-2 * time.Hour)
 		lastRun = &last
+	} else if err != nil {
+		log.Fatalln("Error reading last run time:", err)
 	}
 
 	fp := gofeed.NewParser()
@@ -98,20 +89,28 @@ func main() {
 }
 
 type Handler struct {
-	TimestampFile *os.File
-	Config        *ConfigTreeRoot
+	Config *ConfigTreeRoot
 }
 
-func NewHandler(f *os.File, config *ConfigTreeRoot) *Handler {
+func NewHandler(config *ConfigTreeRoot) *Handler {
 	return &Handler{
-		TimestampFile: f,
-		Config:        config,
+		Config: config,
 	}
 }
 
 func (h *Handler) readLastPostTime() (*time.Time, error) {
+	var f *os.File
+	f, err := os.Open(h.Config.TimestampFile)
+	if os.IsNotExist(err) {
+		return nil, nil
+	} else if err != nil {
+		log.Fatalf("cannot open timestamp file: %v", err)
+		return nil, err
+	}
+	defer f.Close()
+
 	buf := new(bytes.Buffer)
-	_, err := buf.ReadFrom(h.TimestampFile)
+	_, err = buf.ReadFrom(f)
 	if err != nil {
 		return nil, err
 	}
@@ -121,10 +120,13 @@ func (h *Handler) readLastPostTime() (*time.Time, error) {
 }
 
 func (h *Handler) saveLastPostTime(t time.Time) error {
-	if err := h.TimestampFile.Truncate(0); err != nil {
+	var f *os.File
+	f, err := os.OpenFile(h.Config.TimestampFile, os.O_WRONLY|os.O_CREATE|os.O_TRUNC, 0644)
+	if err != nil {
 		return err
 	}
-	_, err := io.WriteString(h.TimestampFile, t.Format(time.RFC3339))
+	defer f.Close()
+	_, err = io.WriteString(f, t.Format(time.RFC3339))
 	return err
 }
 
