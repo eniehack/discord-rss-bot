@@ -58,7 +58,7 @@ func main() {
 
 	h := NewHandler(f, config)
 
-	lastRun, err := h.readLastRunTime()
+	lastRun, err := h.readLastPostTime()
 	if err != nil {
 		log.Println("Error reading last run time:", err)
 		last := time.Now().Add(-3 * time.Hour)
@@ -72,6 +72,7 @@ func main() {
 		return
 	}
 
+	var newestPostTime time.Time
 	for _, item := range feed.Items {
 		if lastRun != nil && !item.PublishedParsed.After(*lastRun) {
 			continue
@@ -83,10 +84,16 @@ func main() {
 			return
 		}
 		log.Println("posted:", item.Link)
+
+		if item.PublishedParsed.After(newestPostTime) {
+			newestPostTime = *item.PublishedParsed
+		}
 	}
 
-	if err := h.saveLastRunTime(time.Now()); err != nil {
-		log.Fatalf("Error saving last run time: %v", err)
+	if !newestPostTime.IsZero() {
+		if err = h.saveLastPostTime(newestPostTime); err != nil {
+			fmt.Println("Error saving last post time:", err)
+		}
 	}
 }
 
@@ -102,7 +109,7 @@ func NewHandler(f *os.File, config *ConfigTreeRoot) *Handler {
 	}
 }
 
-func (h *Handler) readLastRunTime() (*time.Time, error) {
+func (h *Handler) readLastPostTime() (*time.Time, error) {
 	buf := new(bytes.Buffer)
 	_, err := buf.ReadFrom(h.TimestampFile)
 	if err != nil {
@@ -113,7 +120,7 @@ func (h *Handler) readLastRunTime() (*time.Time, error) {
 	return &t, err
 }
 
-func (h *Handler) saveLastRunTime(t time.Time) error {
+func (h *Handler) saveLastPostTime(t time.Time) error {
 	if err := h.TimestampFile.Truncate(0); err != nil {
 		return err
 	}
