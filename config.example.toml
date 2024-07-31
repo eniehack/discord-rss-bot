@@ -1,0 +1,7 @@
+timestamp_file = "./example.time"
+
+[rss]
+feed_url = "https://example.com/feed.xml"
+
+[discord]
+webhook_url = "https://discord.com/api/webhooks/CHANGE_ME"
