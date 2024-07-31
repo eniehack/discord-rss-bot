@@ -6,7 +6,7 @@ import (
 	"flag"
 	"fmt"
 	"io"
-	"log"
+	"log/slog"
 	"net/http"
 	"os"
 	"strings"
@@ -43,25 +43,30 @@ func main() {
 
 	config := new(ConfigTreeRoot)
 	if _, err := toml.DecodeFile(configPath, config); err != nil {
-		log.Fatalf("cannot parse config file: %v", err)
+		slog.Error("cannot parse config file", "msg", err)
+		os.Exit(1)
 	}
 
-	h := NewHandler(config)
+	logger := slog.New(slog.NewTextHandler(os.Stderr, nil))
+	slog.SetDefault(logger)
+
+	h := NewHandler(config, logger)
 
 	lastRun, err := h.readLastPostTime()
 	if err != nil && lastRun == nil {
-		log.Println("timestamp file not found")
+		slog.Info("timestamp file not found")
 		last := time.Now().Add(-2 * time.Hour)
 		lastRun = &last
 	} else if err != nil {
-		log.Fatalln("Error reading last run time:", err)
+		slog.Error("Error last run time reading from file", "err", err)
+		os.Exit(1)
 	}
 
 	fp := gofeed.NewParser()
 	feed, err := fp.ParseURL(config.Rss.FeedUrl)
 	if err != nil {
-		log.Println("Error parsing RSS feed:", err)
-		return
+		slog.Error("Error parsing RSS feed", "msg", err)
+		os.Exit(1)
 	}
 
 	var newestPostTime time.Time
@@ -72,20 +77,22 @@ func main() {
 		time.Sleep(time.Second * 1)
 		err := h.sendToDiscord(item.Title + ": " + item.Link)
 		if err != nil {
-			log.Fatalf("Error sending to Discord: %v", err)
+			slog.Warn("Error sending message to Discord", "msg", err)
 			continue
 		}
-		log.Println("posted:", item.Link)
+		slog.Debug("posted a feed", "msg", fmt.Sprintf("link: %s", item.Link))
 
 		if item.PublishedParsed.After(newestPostTime) {
 			newestPostTime = *item.PublishedParsed
 		}
 	}
 
-	if !newestPostTime.IsZero() {
-		if err = h.saveLastPostTime(newestPostTime); err != nil {
-			fmt.Println("Error saving last post time:", err)
-		}
+	if newestPostTime.IsZero() {
+		slog.Warn("newestPostTime is zero")
+		os.Exit(1)
+	}
+	if err = h.saveLastPostTime(newestPostTime); err != nil {
+		slog.Error("Error saving last post time", "msg", err)
 	}
 }
 
@@ -93,7 +100,7 @@ type Handler struct {
 	Config *ConfigTreeRoot
 }
 
-func NewHandler(config *ConfigTreeRoot) *Handler {
+func NewHandler(config *ConfigTreeRoot, logger *slog.Logger) *Handler {
 	return &Handler{
 		Config: config,
 	}
@@ -105,7 +112,7 @@ func (h *Handler) readLastPostTime() (*time.Time, error) {
 	if os.IsNotExist(err) {
 		return nil, nil
 	} else if err != nil {
-		log.Fatalf("cannot open timestamp file: %v", err)
+		slog.Error("cannot open timestamp file", "msg", err)
 		return nil, err
 	}
 	defer f.Close()
@@ -117,7 +124,7 @@ func (h *Handler) readLastPostTime() (*time.Time, error) {
 	}
 	crTrimedStr := strings.TrimRight(buf.String(), "\n")
 	t, err := time.Parse(time.RFC3339, crTrimedStr)
-	fmt.Println("t: ", t)
+	slog.Debug("parsed time", "msg", fmt.Sprintf("timestamp: %s", t))
 	return &t, err
 }
 
@@ -133,14 +140,12 @@ func (h *Handler) saveLastPostTime(t time.Time) error {
 }
 
 func (h *Handler) sendToDiscord(content string) error {
-	msg := &DiscordMessage{
-		Content: content,
-	}
+	msg := h.createMessage(content)
 	buf := new(bytes.Buffer)
 	if err := json.NewEncoder(buf).Encode(msg); err != nil {
 		return err
 	}
-	fmt.Println(h.Config.Discord.WebhookUrl, buf.String())
+	slog.Debug("created POST body", "msg", buf.String())
 
 	resp, err := http.Post(h.Config.Discord.WebhookUrl, "application/json", buf)
 	if err != nil {
@@ -153,4 +158,10 @@ func (h *Handler) sendToDiscord(content string) error {
 	}
 
 	return nil
+}
+
+func (h *Handler) createMessage(content string) *DiscordMessage {
+	return &DiscordMessage{
+		Content: content,
+	}
 }
